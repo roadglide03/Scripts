@@ -1,0 +1,277 @@
+#!/bin/bash -
+# homeACLtool  :::  script to manage default ACLs inside a user home (Mac OSX)
+#(c)EF/-HI-2008.Feb.05 [rev:2009.Mar.15]
+IFS=$'\n' # facilitates for-loops
+PATH=/bin:/usr/bin:/usr/sbin
+export PATH
+blockKybd () { stty -echo igncr; }
+allowKybd () { stty echo -igncr; }
+PROG=$(basename "$0")
+UZER=$(basename ~)
+XCOD=0
+
+exit2sh ()
+{
+	trap '' INT QUIT ABRT TERM HUP
+	[[ $1 ]] && (( XCOD+=$1 ))
+	if [ $XCOD -ne 0 ]
+	then
+		s=s; [ $XCOD -eq 1 ] && s=
+		printf '\e[37;41m %d error%s occurred \e[0m\n' $XCOD "$s" >&2
+		[ $XCOD -gt 125 ] && XCOD=125
+	fi
+	exit $XCOD
+}
+
+trap 'printf "\r\e[2K\e[0m$PROG: stopping on signal...\n" >&2;
+	exit2sh' INT QUIT ABRT TERM
+trap 'printf "\e[0m" >&2; allowKybd' EXIT
+blockKybd
+
+accumulateStatus () { (( XCOD+=$? )); }
+noErrorsHappened () { [ $XCOD -eq 0 ]; }
+
+# list flags in both Leopard & Tiger
+o=o; [[ `/bin/ls -do` != . ]] && o=O
+LsOpts=-bdeFGhl${o}
+
+# :|:-----------------------------------:|:
+# :|:---------=< homeACLtool >=---------:|:
+# :V:-----------------------------------:V:
+
+if [[ $1 ]] && [[ $1 != -l ]]
+then
+	if [ -r /usr/sbin/fsaclctl ] && z=`fsaclctl -p / 2>/dev/null`
+	then
+		if echo $z |grep -iqs disabled
+		then
+			printf 'Need to enable ACLs with \e[1msudo' >&2
+			printf ' fsaclctl -p / -e\e[0m\nand restart,' >&2
+			printf ' before this script becomes useful.\n' >&2
+			exit2sh 1 #ACLs disabled
+		fi
+	else
+		printf 'cannot find fsaclctl\n' >&2
+		exit2sh 1 #ACLs impossible
+	fi
+fi
+
+DropBoxACL=user:$UZER\ allow\ list,add_file,search,\
+delete,add_subdirectory,delete_child,readattr,writeattr,\
+readextattr,writeextattr,readsecurity,writesecurity,chown,\
+file_inherit,directory_inherit
+
+DropBoxDir=~/Public/Drop\ Box
+
+DefaultACL=group:everyone\ deny\ delete
+
+ACLfolders='~
+	~/Desktop
+	~/Documents
+	~/Downloads
+	~/Movies
+	~/Music
+	~/Pictures
+	~/Public
+	~/Sites
+	~/Library
+	~/Library/Application Support
+	~/Library/Assistants
+	~/Library/Audio/MIDI Drivers
+	~/Library/Audio/Plug-Ins/Components
+	~/Library/Audio/Plug-Ins/Digidesign
+	~/Library/Audio/Plug-Ins/VST
+	~/Library/Audio/Plug-Ins
+	~/Library/Audio/Sounds/Alerts
+	~/Library/Audio/Sounds/Banks
+	~/Library/Audio/Sounds
+	~/Library/Audio
+	~/Library/ColorPickers
+	~/Library/Compositions
+	~/Library/Favorites
+	~/Library/FontCollections
+	~/Library/Fonts
+	~/Library/iMovie/Plug-ins
+	~/Library/iMovie/Sound Effects
+	~/Library/iMovie
+	~/Library/Input Methods
+	~/Library/Internet Plug-Ins
+	~/Library/Keyboard Layouts
+	~/Library/Preferences
+	~/Library/Printers
+	~/Library/Screen Savers
+	~/Library/Sounds
+	~/Library/Voices
+'
+#	~/Applications
+#	~/bin
+#
+# ^to customize, add more items above^
+
+itemList () { echo "$ACLfolders" |sed 's: :\\\ :g'; }
+
+doNONstandardACLs ()
+{
+	local fullList= s=s c=0
+	printf '\e[1;5m looking for extra ACLs...\e[0m\r' >&2
+	fullList=$(find -x ~ -not -type l -print0 |xargs -0 ls -ldeT |
+		grep -B 1 '^ 0: ' |sed '/:[0-9][0-9]/!d;
+			s:^.*\:[0-9][0-9] [0-9]\{4\} ::')
+	accumulateStatus
+	printf '\e[2K\e[0m' >&2
+	if [[ $fullList ]]
+	then
+		for i in $fullList
+		do
+			for x in `itemList`
+			do
+				if [ $i = `eval echo $x` ]
+				then
+					continue 2
+				fi
+			done
+			if [[ $i != $DropBoxDir ]]
+			then
+				(( c+=1 ))
+				case $1 in
+				  locate)
+					printf '\n\e[7mACL extra:\e[0m\n'
+					ls $LsOpts "$i"
+					accumulateStatus
+					;;
+				  change)
+					chmod -N $i
+					accumulateStatus
+					printf '\n\e[7mACL removed:\e[0m\n'
+					ls $LsOpts "$i"
+					accumulateStatus
+					;;
+				esac
+			fi
+		done
+		if [ $c -ne 0 ]
+		then
+			[ $c -eq 1 ] && s=
+			printf '\n\e[1;4m%sd %s additional item%s with ' $1 $c "$s"
+			printf 'ACLs not defined in standard Mac OSX\e[0m\n\n'
+
+		elif noErrorsHappened
+		then
+			printf 'no ACLs found on any *non*-default items\n'
+		fi
+	else
+		printf '\e[37;41m NOTICE: no ACLs were found in %s at all \e[0m\n' ~
+	fi
+}
+
+s=s c=0
+case $1 in
+  -l) # list the default folders:
+	eval ls $LsOpts `itemList`
+	accumulateStatus
+	ls $LsOpts "$DropBoxDir"
+	accumulateStatus
+	;;
+
+  -c) # check default folders for proper ACLs:
+	for x in `itemList`
+	do
+		y=`eval ls -lde $x |sed 1d`
+		accumulateStatus
+		if [ "$y" != " 0: $DefaultACL" ]
+		then
+			(( c+=1 ))
+			printf '\n\e[7mACL error:\e[0m\n'
+			eval ls $LsOpts "$x"
+			accumulateStatus
+		fi
+	done
+	y=`ls -lde $DropBoxDir |sed 1d`
+	accumulateStatus
+	if [ "$y" != " 0: $DropBoxACL" ]
+	then
+		(( c+=1 ))
+		printf '\n\e[7mACL error:\e[0m\n'
+		ls $LsOpts "$DropBoxDir"
+		accumulateStatus
+	fi
+	if [ $c -ne 0 ]
+	then
+		[ $c -eq 1 ] && s=
+		printf '\n\e[1;4mspotted %s default item%s with entries' $c "$s"
+		printf ' different from standard Mac OSX\e[0m\n\n'
+
+	elif noErrorsHappened
+	then
+		printf 'all ACLs on default items appear correct\n'
+	fi
+	;;
+
+  -f) # list *non*-default items with ACLs:
+	doNONstandardACLs 'locate'
+	accumulateStatus
+	;;
+
+  -R) # remove ACLs from *non*default items:
+	allowKybd
+	printf "> Allow $PROG to remove ACLs from *non*-default items in " >&2
+	printf '%s? (y/n [n]): \a' ~ >&2
+	read -t66; [ "$REPLY" != y ] && echo '^Canceled' >&2 && exit2sh
+	blockKybd
+	doNONstandardACLs 'change'
+	accumulateStatus
+	;;
+
+  -E) # erase all ACLs:
+	allowKybd
+	printf 'Erasing ACLs will clear out \e[1mevery\e[0m ACL entry from ' >&2
+	printf "items in your home.\n> Allow $PROG to erase all ACLs from " >&2
+	printf '%s? (y/n [n]): \a' ~ >&2
+	read -t66; [ "$REPLY" != y ] && echo '^Canceled' >&2 && exit2sh
+	blockKybd
+	chmod -R -N ~
+	accumulateStatus
+	if noErrorsHappened
+	then
+		printf '%s: every ACL erased from items in %s\n' "$PROG" ~
+	fi
+	;;
+
+  -D) # set default ACLs:
+	allowKybd
+	printf "> Allow $PROG to apply default ACLs on default items in " >&2
+	printf '%s? (y/n [n]): ' ~ >&2
+	read -t66; [ "$REPLY" != y ] && echo '^Canceled' >&2 && exit2sh
+	blockKybd
+	eval chmod -N `itemList`
+	accumulateStatus
+	chmod -N "$DropBoxDir"
+	accumulateStatus
+	eval chmod +a \""$DefaultACL"\" `itemList`
+	accumulateStatus
+	chmod +a "$DropBoxACL" "$DropBoxDir"
+	accumulateStatus
+	if noErrorsHappened
+	then
+		printf '%s: default ACLs restored to ' "$PROG"
+		printf 'existing unlocked default items in %s\n' ~
+	fi
+	;;
+
+   *)	printf 'Usage:\e[1m %s  -l\e[0m | \e[1m-c\e[0m | ' "$PROG" >&2
+	printf '\e[1m-f\e[0m | \e[1m-R\e[0m | \e[1m-E\e[0m | \e[1m-D\e[0m\n\n' >&2
+	cat <<-helpdoc >&2
+	 -l   list only those items in our home which come with ACLs by default.
+	 -c   check default items and list any whose ACL deviates from the norm.
+
+	 -f   find and list any *non*-default item with ACLs in our home folder.
+	 -R   find and Remove all ACLs in our home found on *non*-default items.
+
+	 -E   Erase **every** ACL entry within our entire home folder hierarchy.
+	 -D   set Default ACLs in our home on the Default items (ignore others).
+
+	NB: this script manages ACLs only; not ownerships, POSIX perms or flags.
+	helpdoc
+	;;
+esac
+exit2sh

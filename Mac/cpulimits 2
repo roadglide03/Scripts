@@ -1,0 +1,31 @@
+
+#!/bin/ksh 
+# Written by Andrew Dishong Forsythe
+# Version 0.1, Last Mod. Date 111710
+# Usage: CPULimit.sh "processname" "CPU %"
+
+# Check to see if running root
+PROG=`basename $0` ; export PROG
+
+if [ "${LOGNAME}" = "root" ]
+then    # Success
+        :
+else    # exit - Not root
+        echo "${PROG}: Login in as root then retry script!"
+        exit 1
+fi
+
+# Setup global paths
+PATH=$PATH:/Applications/Utilities
+BINPATH=/Applications/Utilities/CPULimits
+
+# Setup varibles 
+hostname=`uname -n`
+	echo "Enter Process Name?"
+	read process
+	echo "Enter CPU Percentage?"
+	read cpu
+	processid=`ps -ef |grep -i $process|grep -v grep |awk '{print $2}'`
+	echo "Throttling Process $process $processid to CPU percentage $cpu"
+	$BINPATH/cputhrottle $processid	$cpu 
+exit 0
