@@ -1,0 +1,1 @@
+for i in `ls -1 /Users/andy/Documents/Work/Customers/Walgreens/Data/Perf/Output` ;do for d in `ls -1 /Users/andy/Documents/Work/Customers/Walgreens/Data/Perf/Output/$i/` ;do cat /Users/andy/Documents/Work/Customers/Walgreens/Data/Perf/Output/$i/$d/mpstat.out; done; done
