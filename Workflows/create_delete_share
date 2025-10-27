@@ -1,0 +1,16 @@
+// Simple example of how to create/delete a share.
+// File example5.txt
+// Information to be used in workflow object:
+var MyWorkflow = {
+       MyVersion:          '1.0.0',
+       MyName:             'Create/Delete a share',
+       MyDescription:      'Example of how to create/delete a share',
+       Origin:             'Oracle Corporation',
+err: { 	     // Definition of error codes.
+             // Define a range for your project that
+             // can be recognized by the sysadmins in
+             // your org.
+WP_SCRIPT_WORKFLOWS_CREATE_SHARE:  8001,
+WP_SCRIPT_WORKFLOWS_DELETE_SHARE:  8002,
+	}
+}

@@ -1,0 +1,52 @@
+var workflow = {
+name: 'Get User Quotas',
+description: 'Displays Quota Utilisation for each user on each share',
+execute: function () {
+        run('cd /');
+        run('shares');
+        projects=list();
+        for (i=0; i < projects.length; i++)
+        {
+                run('select ' + projects[i]);
+                shares=list('filesystem');
+                printf("Project: %s\n", projects[i]);
+
+                for(j=0; j < shares.length; j++)
+                {
+                        run('select ' +shares[j]);
+                        try
+                        {
+                                run('users');
+                                printf("  SHARE: %s\n", shares[j]);
+                                printf("    %20s        %11s    %11s    %3s\n","Username","Usage(G)","Quota(G)","Quota(%)");
+                                printf("    %20s        %11s    %11s    %4s\n","--------","--------","--------","-------");
+
+                                users=list();
+                                for(k=0; k < users.length; k++)
+                                {
+                                        run('select ' + users[k]);
+                                        username=get('name');
+                                        usage=get('usage');
+                                        quota=get('quota');
+                                        usage_g=usage / 1073741824; // convert bytes to gigabytes
+                                        quota_g=quota / 1073741824; // as above
+                                        quota_percent=0
+                                        if (quota > 0)
+                                        {
+                                                quota_percent=(usage / quota)*(100/1);
+                                        }
+                                        printf("    %20s        %8.2f   %8.2f %d%%\n",username,usage_g,quota_g,quota_percent);
+                                        run('done');
+                                }
+                                run('done'); // exit user context
+                        }
+                        catch(err)
+                        {
+                        //      printf("    %s is a LUN, Not looking for users\n", shares[j]);
+                        }
+                        run('done'); // exit selected share context
+                }
+                run('done'); // exit project context
+        }
+        }
+};
