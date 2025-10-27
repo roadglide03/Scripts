@@ -1,0 +1,10 @@
+#Steps to create zone(s)
+#
+zoneadm list -vc
+
+zonecfg -z zone01
+create
+set zonepath=/export/zone01
+set autoboot=true
+
+
